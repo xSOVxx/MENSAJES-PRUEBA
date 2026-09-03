@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Real-Time entre Dispositivos</title>
+  <!-- Cargamos la librería de comunicación Realtime por CDN (Gratis, sin backend) -->
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 0; padding: 16px; }
+    .card { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 12px; }
+    .status-badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; background: #ffe082; color: #5d4037; }
+    .status-connected { background: #c8e6c9; color: #2e7d32; }
+    .chat-box { height: 260px; overflow-y: auto; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin: 10px 0; }
+    .msg { margin-bottom: 8px; padding: 8px 12px; border-radius: 8px; max-width: 80%; word-wrap: break-word; }
+    .msg-remote { background: #e3f2fd; color: #0d47a1; align-self: flex-start; }
+    .msg-local { background: #d1c4e9; color: #4a148c; margin-left: auto; text-align: right; }
+    .msg-system { background: #eeeeee; color: #616161; font-size: 11px; text-align: center; margin: 4px auto; }
+    .input-group { display: flex; gap: 8px; }
+    input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 8px; outline: none; }
+    button { background: #3880ff; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    button:active { opacity: 0.8; }
+    .btn-cam { background: #2dd36f; }
+  </style>
+</head>
+<body>
+
+  <h2>💬 Chat de Prueba entre Dispositivos</h2>
+
+  <div class="card">
+    <div><strong>Tu ID de Conexión:</strong> <code id="my-id">Generando ID...</code></div>
+    <div style="margin-top: 6px;">
+      Estado: <span id="status" class="status-badge">Conectando a red Realtime...</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <label><strong>Conectarte a otro Dispositivo:</strong></label>
+    <div class="input-group" style="margin-top: 6px;">
+      <input type="text" id="target-id-input" placeholder="Pega el ID del otro celular/PC...">
+      <button onclick="conectarAConspirador()">Conectar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="chat-box" class="chat-box">
+      <div class="msg msg-system">Abre esta URL en 2 dispositivos o pestañas diferentes. Copia el ID de un dispositivo y pégalo en el otro para chatear.</div>
+    </div>
+    
+    <div class="input-group">
+      <input type="text" id="msg-input" placeholder="Escribe un mensaje..." onkeypress="if(event.key==='Enter') enviarMensaje()">
+      <button onclick="enviarMensaje()">Enviar</button>
+    </div>
+
+    <div style="margin-top: 12px; display: flex; gap: 8px;">
+      <button class="btn-cam" onclick="solicitarCamaraIonic()">📷 Probar Cámara (Capacitor)</button>
+    </div>
+  </div>
+
+  <script>
+    let peer = null;
+    let conn = null;
+    const TARGET_SHELL_ORIGIN = '*';
+
+    // 1. Inicializar canal PeerJS en tiempo real (Sin servidor backend propio)
+    function initRealtime() {
+      peer = new Peer();
+
+      peer.on('open', (id) => {
+        document.getElementById('my-id').innerText = id;
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = 'Listo para conectar';
+        statusEl.classList.add('status-connected');
+      });
+
+      // Escuchar conexión entrante de otro dispositivo
+      peer.on('connection', (c) => {
+        conn = c;
+        setupConnectionListeners();
+        agregarMensajeSistema('¡Otro dispositivo se ha conectado contigo!');
+      });
+    }
+
+    // 2. Conectarse manualmente al ID del otro dispositivo
+    function conectarAConspirador() {
+      const targetId = document.getElementById('target-id-input').value.trim();
+      if (!targetId) return alert('Por favor ingresa un ID válido.');
+      
+      conn = peer.connect(targetId);
+      setupConnectionListeners();
+    }
+
+    function setupConnectionListeners() {
+      conn.on('open', () => {
+        agregarMensajeSistema('Conexión bidireccional establecida en tiempo real.');
+      });
+
+      // Recibir mensaje en tiempo real desde el otro dispositivo
+      conn.on('data', (data) => {
+        if (data.type === 'CHAT_MSG') {
+          agregarMensajeRemoto(data.text);
+        }
+      });
+
+      conn.on('close', () => {
+        agregarMensajeSistema('El otro dispositivo se ha desconectado.');
+      });
+    }
+
+    // 3. Enviar mensaje al otro dispositivo
+    function enviarMensaje() {
+      const input = document.getElementById('msg-input');
+      const text = input.value.trim();
+
+      if (!text) return;
+      if (!conn || !conn.open) {
+        alert('Debes conectarte a otro dispositivo ingresando su ID primero.');
+        return;
+      }
+
+      conn.send({ type: 'CHAT_MSG', text: text });
+      agregarMensajeLocal(text);
+      input.value = '';
+    }
+
+    // Renderizado de mensajes en UI
+    function agregarMensajeLocal(texto) {
+      const box = document.getElementById('chat-box');
+      box.innerHTML += `<div class="msg msg-local"><strong>Tú:</strong> ${texto}</div>`;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function agregarMensajeRemoto(texto) {
+      const box = document.getElementById('chat-box');
+      box.innerHTML += `<div class="msg msg-remote"><strong>Amigo:</strong> ${texto}</div>`;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function agregarMensajeSistema(texto) {
+      const box = document.getElementById('chat-box');
+      box.innerHTML += `<div class="msg msg-system">${texto}</div>`;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    // 4. Integración con el Shell de Ionic via postMessage
+    window.addEventListener('load', () => {
+      initRealtime();
+      if (window.parent) {
+        window.parent.postMessage({ type: 'CHAT_MFE_READY' }, TARGET_SHELL_ORIGIN);
+      }
+    });
+
+    window.addEventListener('message', (event) => {
+      const { type, payload } = event.data;
+      if (type === 'INIT_SESSION') {
+        agregarMensajeSistema(`Token recibido de Ionic: ${payload.token || 'OK'}`);
+      }
+    });
+
+    function solicitarCamaraIonic() {
+      if (window.parent) {
+        window.parent.postMessage({ type: 'OPEN_CAMERA' }, TARGET_SHELL_ORIGIN);
+      }
+    }
+  </script>
+</body>
+</html>
