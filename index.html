@@ -29,6 +29,14 @@
     .media-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .btn-audio { background: #eb445a; }
     .btn-recording { background: #92949c; }
+    .call-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .btn-call { background: #16a34a; }
+    .btn-video-call { background: #0f766e; }
+    .btn-hangup { background: #dc2626; }
+    .call-panel { display: none; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; padding: 8px; background: #f8f9fa; border-radius: 8px; }
+    .call-panel.active { display: flex; }
+    .call-video { width: min(220px, 100%); max-height: 160px; background: #111; border-radius: 6px; }
+    .call-status { font-size: 12px; color: #555; flex: 1 1 100%; }
   </style>
 </head>
 <body>
@@ -89,6 +97,18 @@
     <input type="file" id="photo-input" accept="image/*" capture="environment" hidden onchange="usarArchivoGenerado(event)">
     <input type="file" id="video-input" accept="video/*" capture="environment" hidden onchange="usarArchivoGenerado(event)">
 
+    <div class="call-actions">
+      <button type="button" class="btn-call" onclick="iniciarLlamada('audio')">📞 Llamada de voz</button>
+      <button type="button" class="btn-video-call" onclick="iniciarLlamada('video')">📹 Videollamada</button>
+    </div>
+    <div id="call-panel" class="call-panel">
+      <span id="call-status" class="call-status">Sin llamada activa</span>
+      <video id="local-call-video" class="call-video" autoplay muted playsinline></video>
+      <video id="remote-call-video" class="call-video" autoplay playsinline></video>
+      <audio id="remote-call-audio" autoplay></audio>
+      <button type="button" class="btn-hangup" onclick="finalizarLlamada()">☎️ Colgar</button>
+    </div>
+
     <div style="margin-top: 10px;">
       <button class="btn-cam" onclick="solicitarCamaraIonic()">📷 Probar Cámara (Capacitor)</button>
     </div>
@@ -100,6 +120,8 @@
     let archivoAdjunto = null;
     let grabadoraAudio = null;
     let partesAudio = [];
+    let llamadaActiva = null;
+    let streamLlamadaLocal = null;
     let datosSesionIonic = {
       subdomain: 'demo',
       localNombre: 'Local General',
@@ -120,6 +142,99 @@
         setupListeners();
         agregarMensajeSistema('¡Un nuevo dispositivo se ha conectado!');
       });
+
+      peer.on('call', (call) => {
+        const tipo = call.metadata?.type === 'video' ? 'video' : 'audio';
+        if (!confirm(`Llamada entrante de ${call.metadata?.from || 'otro dispositivo'}. ¿Responder?`)) {
+          call.close();
+          return;
+        }
+        responderLlamada(call, tipo);
+      });
+    }
+
+    async function obtenerStreamLlamada(tipo) {
+      return navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: tipo === 'video'
+      });
+    }
+
+    function mostrarPanelLlamada(estado) {
+      document.getElementById('call-panel').classList.add('active');
+      document.getElementById('call-status').innerText = estado;
+    }
+
+    function conectarStreamRemoto(stream, tipo) {
+      const elemento = document.getElementById(tipo === 'video' ? 'remote-call-video' : 'remote-call-audio');
+      elemento.srcObject = stream;
+      if (tipo === 'video') {
+        document.getElementById('remote-call-video').style.display = 'block';
+        document.getElementById('remote-call-audio').style.display = 'none';
+      } else {
+        document.getElementById('remote-call-video').style.display = 'none';
+        document.getElementById('remote-call-audio').style.display = 'block';
+      }
+    }
+
+    async function iniciarLlamada(tipo) {
+      const targetId = document.getElementById('target-id-input').value.trim();
+      if (!targetId) return alert('Ingresa el ID del dispositivo al que llamar.');
+      if (!peer || !peer.open) return alert('Espera a que se genere tu ID de conexión.');
+      if (llamadaActiva) return alert('Ya hay una llamada activa.');
+
+      try {
+        streamLlamadaLocal = await obtenerStreamLlamada(tipo);
+        llamadaActiva = peer.call(targetId, streamLlamadaLocal, {
+          metadata: { type: tipo, from: datosSesionIonic.usuarioNombre }
+        });
+        mostrarPanelLlamada('Llamando...');
+        document.getElementById('local-call-video').srcObject = streamLlamadaLocal;
+        document.getElementById('local-call-video').style.display = tipo === 'video' ? 'block' : 'none';
+        llamadaActiva.on('stream', (stream) => {
+          conectarStreamRemoto(stream, tipo);
+          document.getElementById('call-status').innerText = tipo === 'video' ? 'Videollamada activa' : 'Llamada activa';
+        });
+        llamadaActiva.on('close', finalizarLlamada);
+        llamadaActiva.on('error', () => {
+          finalizarLlamada();
+          alert('No se pudo establecer la llamada.');
+        });
+      } catch (error) {
+        alert('No se pudo acceder al micrófono o la cámara. Revisa los permisos.');
+      }
+    }
+
+    async function responderLlamada(call, tipo) {
+      try {
+        streamLlamadaLocal = await obtenerStreamLlamada(tipo);
+        llamadaActiva = call;
+        call.answer(streamLlamadaLocal);
+        mostrarPanelLlamada(tipo === 'video' ? 'Videollamada activa' : 'Llamada activa');
+        document.getElementById('local-call-video').srcObject = streamLlamadaLocal;
+        document.getElementById('local-call-video').style.display = tipo === 'video' ? 'block' : 'none';
+        call.on('stream', (stream) => conectarStreamRemoto(stream, tipo));
+        call.on('close', finalizarLlamada);
+      } catch (error) {
+        call.close();
+        alert('No se pudo acceder al micrófono o la cámara. Revisa los permisos.');
+      }
+    }
+
+    function finalizarLlamada() {
+      if (llamadaActiva) {
+        const llamada = llamadaActiva;
+        llamadaActiva = null;
+        llamada.close();
+      }
+      if (streamLlamadaLocal) {
+        streamLlamadaLocal.getTracks().forEach((track) => track.stop());
+        streamLlamadaLocal = null;
+      }
+      document.getElementById('local-call-video').srcObject = null;
+      document.getElementById('remote-call-video').srcObject = null;
+      document.getElementById('remote-call-audio').srcObject = null;
+      document.getElementById('call-panel').classList.remove('active');
     }
 
     function conectarAConspirador() {
