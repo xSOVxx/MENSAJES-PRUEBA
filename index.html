@@ -26,6 +26,9 @@
     .attachment-row input { flex: 0 1 auto; padding: 6px; }
     .attachment-name { color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .message-media { display: block; max-width: 100%; max-height: 220px; margin-top: 6px; border-radius: 6px; }
+    .media-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .btn-audio { background: #eb445a; }
+    .btn-recording { background: #92949c; }
   </style>
 </head>
 <body>
@@ -74,9 +77,17 @@
 
     <div class="attachment-row">
       <label for="attachment-input"><strong>Adjuntar:</strong></label>
-      <input type="file" id="attachment-input" accept="image/*,video/*" onchange="actualizarAdjunto()">
+      <input type="file" id="attachment-input" accept="image/*,video/*,audio/*" onchange="actualizarAdjunto()">
       <span id="attachment-name" class="attachment-name">Ningún archivo seleccionado</span>
     </div>
+
+    <div class="media-actions">
+      <button type="button" onclick="abrirCamaraFoto()">📸 Tomar foto</button>
+      <button type="button" onclick="abrirCamaraVideo()">🎥 Grabar video</button>
+      <button type="button" id="audio-button" class="btn-audio" onclick="alternarGrabacionAudio()">🎙️ Grabar audio</button>
+    </div>
+    <input type="file" id="photo-input" accept="image/*" capture="environment" hidden onchange="usarArchivoGenerado(event)">
+    <input type="file" id="video-input" accept="video/*" capture="environment" hidden onchange="usarArchivoGenerado(event)">
 
     <div style="margin-top: 10px;">
       <button class="btn-cam" onclick="solicitarCamaraIonic()">📷 Probar Cámara (Capacitor)</button>
@@ -86,6 +97,9 @@
   <script>
     let peer = null;
     let conn = null;
+    let archivoAdjunto = null;
+    let grabadoraAudio = null;
+    let partesAudio = [];
     let datosSesionIonic = {
       subdomain: 'demo',
       localNombre: 'Local General',
@@ -160,7 +174,58 @@
     function actualizarAdjunto() {
       const input = document.getElementById('attachment-input');
       const name = document.getElementById('attachment-name');
-      name.innerText = input.files[0] ? input.files[0].name : 'Ningún archivo seleccionado';
+      archivoAdjunto = input.files[0] || null;
+      name.innerText = archivoAdjunto ? archivoAdjunto.name : 'Ningún archivo seleccionado';
+    }
+
+    function abrirCamaraFoto() {
+      document.getElementById('photo-input').click();
+    }
+
+    function abrirCamaraVideo() {
+      document.getElementById('video-input').click();
+    }
+
+    function usarArchivoGenerado(event) {
+      archivoAdjunto = event.target.files[0] || null;
+      document.getElementById('attachment-name').innerText = archivoAdjunto
+        ? archivoAdjunto.name
+        : 'Ningún archivo seleccionado';
+      event.target.value = '';
+    }
+
+    async function alternarGrabacionAudio() {
+      const button = document.getElementById('audio-button');
+      if (grabadoraAudio && grabadoraAudio.state === 'recording') {
+        grabadoraAudio.stop();
+        button.innerText = '🎙️ Grabar audio';
+        button.classList.remove('btn-recording');
+        return;
+      }
+
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        return alert('Este dispositivo o navegador no permite grabar audio.');
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        partesAudio = [];
+        grabadoraAudio = new MediaRecorder(stream);
+        grabadoraAudio.ondataavailable = (event) => {
+          if (event.data.size) partesAudio.push(event.data);
+        };
+        grabadoraAudio.onstop = () => {
+          const tipo = grabadoraAudio.mimeType || 'audio/webm';
+          archivoAdjunto = new File([new Blob(partesAudio, { type: tipo })], `audio-${Date.now()}.webm`, { type: tipo });
+          document.getElementById('attachment-name').innerText = archivoAdjunto.name;
+          stream.getTracks().forEach((track) => track.stop());
+        };
+        grabadoraAudio.start();
+        button.innerText = '⏹️ Detener audio';
+        button.classList.add('btn-recording');
+      } catch (error) {
+        alert('No se pudo acceder al micrófono. Revisa los permisos.');
+      }
     }
 
     function leerArchivo(file) {
@@ -176,7 +241,7 @@
       const input = document.getElementById('msg-input');
       const attachmentInput = document.getElementById('attachment-input');
       const text = input.value.trim();
-      const file = attachmentInput.files[0];
+      const file = archivoAdjunto || attachmentInput.files[0];
       if (!text && !file) return;
 
       if (!conn || !conn.open) {
@@ -205,6 +270,7 @@
       agregarMensajeLocal(text, datosSesionIonic, attachment);
       input.value = '';
       attachmentInput.value = '';
+      archivoAdjunto = null;
       actualizarAdjunto();
     }
 
@@ -213,11 +279,16 @@
       if (text) content.appendChild(document.createTextNode(text));
 
       if (attachment && attachment.dataUrl) {
-        const media = document.createElement(attachment.type.startsWith('video/') ? 'video' : 'img');
+        const mediaType = attachment.type.startsWith('video/')
+          ? 'video'
+          : attachment.type.startsWith('audio/')
+            ? 'audio'
+            : 'img';
+        const media = document.createElement(mediaType);
         media.className = 'message-media';
         media.src = attachment.dataUrl;
         media.alt = attachment.name || 'Archivo adjunto';
-        if (media.tagName === 'VIDEO') {
+        if (media.tagName === 'VIDEO' || media.tagName === 'AUDIO') {
           media.controls = true;
           media.preload = 'metadata';
         }
