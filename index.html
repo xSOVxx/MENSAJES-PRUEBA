@@ -22,6 +22,10 @@
     input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 13px; }
     button { background: #3880ff; color: white; border: none; padding: 10px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; }
     .btn-cam { background: #2dd36f; }
+    .attachment-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; }
+    .attachment-row input { flex: 0 1 auto; padding: 6px; }
+    .attachment-name { color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .message-media { display: block; max-width: 100%; max-height: 220px; margin-top: 6px; border-radius: 6px; }
   </style>
 </head>
 <body>
@@ -68,6 +72,12 @@
       <button onclick="enviarMensaje()">Enviar</button>
     </div>
 
+    <div class="attachment-row">
+      <label for="attachment-input"><strong>Adjuntar:</strong></label>
+      <input type="file" id="attachment-input" accept="image/*,video/*" onchange="actualizarAdjunto()">
+      <span id="attachment-name" class="attachment-name">Ningún archivo seleccionado</span>
+    </div>
+
     <div style="margin-top: 10px;">
       <button class="btn-cam" onclick="solicitarCamaraIonic()">📷 Probar Cámara (Capacitor)</button>
     </div>
@@ -112,7 +122,7 @@
 
       conn.on('data', (data) => {
         if (data.type === 'CHAT_MSG') {
-          agregarMensajeRemoto(data.text, data.meta);
+          agregarMensajeRemoto(data.text, data.meta, data.attachment);
         }
       });
     }
@@ -147,43 +157,99 @@
     });
 
     // 3. Enviar mensaje adjuntando la información del Local y Usuario de Ionic
-    function enviarMensaje() {
+    function actualizarAdjunto() {
+      const input = document.getElementById('attachment-input');
+      const name = document.getElementById('attachment-name');
+      name.innerText = input.files[0] ? input.files[0].name : 'Ningún archivo seleccionado';
+    }
+
+    function leerArchivo(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ name: file.name, type: file.type, dataUrl: reader.result });
+        reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function enviarMensaje() {
       const input = document.getElementById('msg-input');
+      const attachmentInput = document.getElementById('attachment-input');
       const text = input.value.trim();
-      if (!text) return;
+      const file = attachmentInput.files[0];
+      if (!text && !file) return;
 
       if (!conn || !conn.open) {
         return alert('Conecta los 2 dispositivos primero pegando el ID.');
       }
 
+      if (file && file.size > 15 * 1024 * 1024) {
+        return alert('El archivo es demasiado grande. El máximo permitido es 15 MB.');
+      }
+
+      let attachment = null;
+      try {
+        attachment = file ? await leerArchivo(file) : null;
+      } catch (error) {
+        return alert(error.message);
+      }
+
       const payloadMensaje = {
         type: 'CHAT_MSG',
         text: text,
-        meta: datosSesionIonic
+        meta: datosSesionIonic,
+        attachment: attachment
       };
 
       conn.send(payloadMensaje);
-      agregarMensajeLocal(text, datosSesionIonic);
+      agregarMensajeLocal(text, datosSesionIonic, attachment);
       input.value = '';
+      attachmentInput.value = '';
+      actualizarAdjunto();
     }
 
-    function agregarMensajeLocal(text, meta) {
+    function crearContenidoMensaje(text, attachment) {
+      const content = document.createDocumentFragment();
+      if (text) content.appendChild(document.createTextNode(text));
+
+      if (attachment && attachment.dataUrl) {
+        const media = document.createElement(attachment.type.startsWith('video/') ? 'video' : 'img');
+        media.className = 'message-media';
+        media.src = attachment.dataUrl;
+        media.alt = attachment.name || 'Archivo adjunto';
+        if (media.tagName === 'VIDEO') {
+          media.controls = true;
+          media.preload = 'metadata';
+        }
+        content.appendChild(media);
+      }
+
+      return content;
+    }
+
+    function agregarMensajeLocal(text, meta, attachment) {
       const box = document.getElementById('chat-box');
-      box.innerHTML += `
-        <div class="msg msg-local">
-          <span class="msg-meta">Tú (${meta.usuarioNombre} | ${meta.localNombre})</span>
-          ${text}
-        </div>`;
+      const message = document.createElement('div');
+      message.className = 'msg msg-local';
+      const messageMeta = document.createElement('span');
+      messageMeta.className = 'msg-meta';
+      messageMeta.innerText = `Tú (${meta.usuarioNombre} | ${meta.localNombre})`;
+      message.appendChild(messageMeta);
+      message.appendChild(crearContenidoMensaje(text, attachment));
+      box.appendChild(message);
       box.scrollTop = box.scrollHeight;
     }
 
-    function agregarMensajeRemoto(text, meta) {
+    function agregarMensajeRemoto(text, meta, attachment) {
       const box = document.getElementById('chat-box');
-      box.innerHTML += `
-        <div class="msg msg-remote">
-          <span class="msg-meta">📩 [${meta.subdomain}] ${meta.usuarioNombre} - ${meta.localNombre} (ID: ${meta.localId}):</span>
-          ${text}
-        </div>`;
+      const message = document.createElement('div');
+      message.className = 'msg msg-remote';
+      const messageMeta = document.createElement('span');
+      messageMeta.className = 'msg-meta';
+      messageMeta.innerText = `📩 [${meta.subdomain}] ${meta.usuarioNombre} - ${meta.localNombre} (ID: ${meta.localId}):`;
+      message.appendChild(messageMeta);
+      message.appendChild(crearContenidoMensaje(text, attachment));
+      box.appendChild(message);
       box.scrollTop = box.scrollHeight;
     }
 
