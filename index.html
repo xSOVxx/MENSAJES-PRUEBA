@@ -26,6 +26,7 @@
     .attachment-row input { flex: 0 1 auto; padding: 6px; }
     .attachment-name { color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .message-media { display: block; max-width: 100%; max-height: 220px; margin-top: 6px; border-radius: 6px; }
+    .message-file { display: inline-block; margin-top: 6px; color: #1565c0; font-weight: bold; word-break: break-word; }
     .media-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .btn-audio { background: #eb445a; }
     .btn-recording { background: #92949c; }
@@ -85,7 +86,7 @@
 
     <div class="attachment-row">
       <label for="attachment-input"><strong>Adjuntar:</strong></label>
-      <input type="file" id="attachment-input" accept="image/*,video/*,audio/*" onchange="actualizarAdjunto()">
+      <input type="file" id="attachment-input" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" onchange="actualizarAdjunto()">
       <span id="attachment-name" class="attachment-name">Ningún archivo seleccionado</span>
     </div>
 
@@ -394,20 +395,32 @@
       if (text) content.appendChild(document.createTextNode(text));
 
       if (attachment && attachment.dataUrl) {
-        const mediaType = attachment.type.startsWith('video/')
-          ? 'video'
-          : attachment.type.startsWith('audio/')
-            ? 'audio'
-            : 'img';
-        const media = document.createElement(mediaType);
-        media.className = 'message-media';
-        media.src = attachment.dataUrl;
-        media.alt = attachment.name || 'Archivo adjunto';
-        if (media.tagName === 'VIDEO' || media.tagName === 'AUDIO') {
-          media.controls = true;
-          media.preload = 'metadata';
+        const tipo = attachment.type || '';
+        const esImagen = tipo.startsWith('image/');
+        const esVideo = tipo.startsWith('video/');
+        const esAudio = tipo.startsWith('audio/');
+
+        if (esImagen || esVideo || esAudio) {
+          const mediaType = esVideo ? 'video' : esAudio ? 'audio' : 'img';
+          const media = document.createElement(mediaType);
+          media.className = 'message-media';
+          media.src = attachment.dataUrl;
+          media.alt = attachment.name || 'Archivo adjunto';
+          if (esVideo || esAudio) {
+            media.controls = true;
+            media.preload = 'metadata';
+          }
+          content.appendChild(media);
+        } else {
+          const link = document.createElement('a');
+          link.className = 'message-file';
+          link.href = attachment.dataUrl;
+          link.download = attachment.name || 'archivo-adjunto';
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.innerText = `📎 ${attachment.name || 'Abrir archivo'}`;
+          content.appendChild(link);
         }
-        content.appendChild(media);
       }
 
       return content;
