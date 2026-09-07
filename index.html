@@ -58,6 +58,7 @@
     <div class="info-grid">
       <div>🏢 <strong>Subdominio:</strong> <span id="meta-subdomain">No recibido</span></div>
       <div>🏬 <strong>Local:</strong> <span id="meta-local">No recibido</span></div>
+      <div>🌎 <strong>País:</strong> <span id="meta-local-country">No recibido</span></div>
       <div>👤 <strong>Usuario:</strong> <span id="meta-user">No recibido</span></div>
       <div>🆔 <strong>Usuario ID:</strong> <span id="meta-user-id">No recibido</span></div>
       <div>💼 <strong>Cargo:</strong> <span id="meta-user-cargo">No recibido</span></div>
@@ -131,6 +132,7 @@
       subdomain: 'demo',
       localNombre: 'Local General',
       localId: 'LOC-1',
+      localPaisId: null,
       usuarioNombre: 'Usuario Web',
       usuarioId: null,
       usuarioCargo: null,
@@ -286,6 +288,7 @@
         datosSesionIonic.subdomain = payload.subdomain || 'N/A';
         datosSesionIonic.localNombre = payload.local?.nombreComercial || 'Local Principal';
         datosSesionIonic.localId = payload.local?.id || 'N/A';
+        datosSesionIonic.localPaisId = payload.local?.paisId || null;
         datosSesionIonic.usuarioNombre = payload.usuario?.nombres || payload.username || 'Usuario App';
         datosSesionIonic.usuarioId = payload.usuario?.id || null;
         datosSesionIonic.usuarioCargo = payload.usuario?.cargo || null;
@@ -297,6 +300,7 @@
         // Actualizar UI con datos del Local y Usuario
         document.getElementById('meta-subdomain').innerText = datosSesionIonic.subdomain;
         document.getElementById('meta-local').innerText = datosSesionIonic.localNombre;
+        document.getElementById('meta-local-country').innerText = datosSesionIonic.localPaisId || 'No recibido';
         document.getElementById('meta-user').innerText = datosSesionIonic.usuarioNombre;
         document.getElementById('meta-user-id').innerText = datosSesionIonic.usuarioId || 'No recibido';
         document.getElementById('meta-user-cargo').innerText = datosSesionIonic.usuarioCargo || 'No recibido';
