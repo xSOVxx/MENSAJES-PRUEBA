@@ -59,6 +59,8 @@
       <div>🏢 <strong>Subdominio:</strong> <span id="meta-subdomain">No recibido</span></div>
       <div>🏬 <strong>Local:</strong> <span id="meta-local">No recibido</span></div>
       <div>👤 <strong>Usuario:</strong> <span id="meta-user">No recibido</span></div>
+      <div>🆔 <strong>Usuario ID:</strong> <span id="meta-user-id">No recibido</span></div>
+      <div>💼 <strong>Cargo:</strong> <span id="meta-user-cargo">No recibido</span></div>
       <div>🆔 <strong>Local ID:</strong> <span id="meta-local-id">No recibido</span></div>
       <div>📱 <strong>Dispositivo:</strong> <span id="meta-device">No recibido</span></div>
       <div>🔔 <strong>Push:</strong> <span id="meta-push">No recibido</span></div>
@@ -130,6 +132,8 @@
       localNombre: 'Local General',
       localId: 'LOC-1',
       usuarioNombre: 'Usuario Web',
+      usuarioId: null,
+      usuarioCargo: null,
       device: null,
       tokenfcm: null,
       tokenaps: null,
@@ -283,6 +287,8 @@
         datosSesionIonic.localNombre = payload.local?.nombreComercial || 'Local Principal';
         datosSesionIonic.localId = payload.local?.id || 'N/A';
         datosSesionIonic.usuarioNombre = payload.usuario?.nombres || payload.username || 'Usuario App';
+        datosSesionIonic.usuarioId = payload.usuario?.id || null;
+        datosSesionIonic.usuarioCargo = payload.usuario?.cargo || null;
         datosSesionIonic.device = payload.device || null;
         datosSesionIonic.tokenfcm = payload.tokenfcm || null;
         datosSesionIonic.tokenaps = payload.tokenaps || null;
@@ -292,6 +298,8 @@
         document.getElementById('meta-subdomain').innerText = datosSesionIonic.subdomain;
         document.getElementById('meta-local').innerText = datosSesionIonic.localNombre;
         document.getElementById('meta-user').innerText = datosSesionIonic.usuarioNombre;
+        document.getElementById('meta-user-id').innerText = datosSesionIonic.usuarioId || 'No recibido';
+        document.getElementById('meta-user-cargo').innerText = datosSesionIonic.usuarioCargo || 'No recibido';
         document.getElementById('meta-local-id').innerText = datosSesionIonic.localId;
         document.getElementById('meta-device').innerText = datosSesionIonic.device || 'No recibido';
         document.getElementById('meta-push').innerText = datosSesionIonic.pushTokenType
